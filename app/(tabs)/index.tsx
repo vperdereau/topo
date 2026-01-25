@@ -1,98 +1,94 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import React, { useEffect, useState } from 'react';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+// --- IMPORTS ---
+import HomeScreen from '../../HomeScreen';
+import LoginScreen from '../../LoginScreen';
+import MapScreen from '../../MapScreen';
+import RouteSocialScreen from '../../RouteSocialScreen';
+import TopoScreen from '../../TopoScreen';
+import ProposeRouteScreen from '../propose-route';
+import TopoEditor from './admin/editor';
 
-export default function HomeScreen() {
+
+// 👇 1. AJOUTE CET IMPORT (Vérifie le chemin selon où tu as créé le fichier)
+import SiteDetailsScreen from '../../SiteDetailsScreen';
+
+const Stack = createStackNavigator();
+const auth = getAuth();
+
+export default function AppStack() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  if (loading) return null;
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <Stack.Navigator screenOptions={{ 
+      headerStyle: { backgroundColor: '#121212' },
+      headerTintColor: '#fff',
+      headerTitleStyle: { fontWeight: 'bold' }
+    }}>
+      {user ? (
+        <>
+          <Stack.Screen 
+            name="Home" 
+            component={HomeScreen} 
+            options={{ headerShown: false }} 
+          />
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+          {/* 👇 2. AJOUTE CETTE ROUTE OBLIGATOIREMENT */}
+          <Stack.Screen 
+            name="SiteDetails" 
+            component={SiteDetailsScreen} 
+            options={{ headerShown: false }} // On gère le header dans le composant
+          />
+          
+          <Stack.Screen 
+            name="Topo" 
+            component={TopoScreen} 
+            options={{ headerShown: false }} 
+          />
+
+          <Stack.Screen 
+            name="Map" 
+            component={MapScreen} 
+            options={{ headerShown: false }} 
+          />
+          
+          <Stack.Screen 
+            name="RouteSocial" 
+            component={RouteSocialScreen} 
+            options={{ title: 'Détails Voie', headerShown: false }} 
+          />
+          
+          <Stack.Screen 
+            name="TopoEditor" 
+            component={TopoEditor} 
+            options={{ title: 'Création de Topo', headerShown: false }} 
+          />
+          <Stack.Screen 
+  name="ProposeRoute" 
+  component={ProposeRouteScreen} 
+  options={{ headerShown: false }} // On gère le header nous-mêmes
+/>
+        </>
+      ) : (
+        <Stack.Screen 
+          name="Login" 
+          component={LoginScreen} 
+          options={{ headerShown: false }} 
+        />
+      )}
+    </Stack.Navigator>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
