@@ -76,39 +76,45 @@ export default function AdminDashboard() {
   // --- LOGIQUE VALIDATION SITES ---
   const validateSite = async (item) => {
       try {
-          // On crée le vrai site dans la collection 'sites'
+          console.log("Validation site avec image :", item.imageUrl); // Debug
+
           await addDoc(collection(db, "sites"), {
               nom: item.nom,
               type: item.type,
+              // 👇 C'EST ICI LA CORRECTION IMPORTANTE 👇
+              imageUrl: item.imageUrl || null, 
+              // 👆 On s'assure de récupérer l'URL du pending_site
+              
               location: item.location,
               lat: item.lat,
               lng: item.lng,
               createdAt: item.createdAt || serverTimestamp(),
               status: 'published'
           });
-          // On supprime la demande
+          
           await deleteDoc(doc(db, "pending_sites", item.id));
           fetchAllPending();
-          Alert.alert("Succès", "Site publié !");
+          Alert.alert("Succès", "Site publié avec son image !");
       } catch (e) { Alert.alert("Erreur", e.message); }
   };
 
-  // --- LOGIQUE VALIDATION SECTEURS ---
+// --- LOGIQUE VALIDATION SECTEURS ---
   const validateSector = async (item) => {
       try {
-          // On ajoute le secteur dans la sous-collection du site parent
           await addDoc(collection(db, "sites", item.siteId, "secteurs"), {
               nom: item.nom,
               siteId: item.siteId,
+              // 👇 CORRECTION ICI AUSSI 👇
+              imageUrl: item.imageUrl || null,
+              
               createdAt: serverTimestamp()
           });
           
           await deleteDoc(doc(db, "pending_sectors", item.id));
           fetchAllPending();
-          Alert.alert("Succès", "Secteur validé !");
+          Alert.alert("Succès", "Secteur validé avec image !");
       } catch (e) { Alert.alert("Erreur", e.message); }
   };
-
   const validateTopo = async (item) => {
       try {
           // On ajoute le topo dans : sites/{siteId}/secteurs/{sectorId}/topos
