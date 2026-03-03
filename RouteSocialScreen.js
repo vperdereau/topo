@@ -145,6 +145,37 @@ export default function RouteSocialScreen() {
             <Text style={styles.subTitle}>COTATION OFFICIELLE</Text>
         </View>
 
+        {/* BLOC INFOS TECHNIQUES */}
+<View style={{flexDirection:'row', marginVertical: 15, justifyContent:'space-around', backgroundColor:'#222', padding: 15, borderRadius: 12}}>
+    <View style={{alignItems:'center'}}>
+        <Ionicons name="resize-outline" size={24} color="#FFD700" />
+        <Text style={{color:'#fff', fontWeight:'bold', marginTop:5}}>
+            {currentRoute.height ? `${currentRoute.height} m` : "--"}
+        </Text>
+        <Text style={{color:'#888', fontSize:10}}>Hauteur</Text>
+    </View>
+
+    <View style={{width: 1, backgroundColor:'#444'}} />
+
+    <View style={{alignItems:'center'}}>
+        <Ionicons name="link-outline" size={24} color="#FFD700" />
+        <Text style={{color:'#fff', fontWeight:'bold', marginTop:5}}>
+            {currentRoute.quickdraws ? currentRoute.quickdraws : "--"}
+        </Text>
+        <Text style={{color:'#888', fontSize:10}}>Dégaines</Text>
+    </View>
+    
+    <View style={{width: 1, backgroundColor:'#444'}} />
+    
+    <View style={{alignItems:'center'}}>
+        <Ionicons name="hardware-chip-outline" size={24} color="#FFD700" />
+        <Text style={{color:'#fff', fontWeight:'bold', marginTop:5}}>
+           Relais
+        </Text>
+        <Text style={{color:'#888', fontSize:10}}>Maillon</Text>
+    </View>
+</View>
+
         {/* GRAPHIQUE DES AVIS */}
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>Avis de la communauté</Text>

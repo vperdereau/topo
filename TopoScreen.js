@@ -190,19 +190,42 @@ export default function TopoScreen() {
       {/* 3. FOOTER BLANC (Info Voie OU Bouton Ajouter) */}
       <View style={styles.footerContainer}>
         {selectedRoute ? (
-             <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
-                <View style={{flex: 1}}>
-                    <View style={{flexDirection:'row', alignItems:'center', marginBottom:5}}>
+             <View>
+                {/* LIGNE 1 : Cotation + Titre */}
+                <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+                    <View style={{flexDirection:'row', alignItems:'center', flex: 1}}>
                         <View style={[styles.badge, { backgroundColor: getGradeColor(selectedRoute.cotation) }]}>
                             <Text style={styles.badgeText}>{selectedRoute.cotation}</Text>
                         </View>
                         <Text style={styles.routeTitle} numberOfLines={1}>{selectedRoute.nom}</Text>
                     </View>
-                    <Text style={{color:'#666', fontSize:12}}>Cliquez sur détails pour voir les commentaires</Text>
+                    
+                    <TouchableOpacity style={styles.detailsBtn} onPress={() => navigation.navigate('RouteSocial', { routeData: JSON.stringify(selectedRoute), cragId: cragId })}>
+                        <Text style={{color:'#fff', fontWeight:'bold', fontSize:12}}>Détails →</Text>
+                    </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.detailsBtn} onPress={() => navigation.navigate('RouteSocial', { routeData: JSON.stringify(selectedRoute), cragId: cragId })}>
-                    <Text style={{color:'#fff', fontWeight:'bold'}}>Détails →</Text>
-                </TouchableOpacity>
+
+                {/* LIGNE 2 : Infos Techniques (Hauteur & Dégaines) - NOUVEAU */}
+                <View style={{flexDirection:'row', marginTop: 8, alignItems:'center'}}>
+                    {selectedRoute.height && (
+                        <View style={styles.metaBadge}>
+                            <Ionicons name="resize" size={14} color="#666" style={{marginRight:4}} />
+                            <Text style={styles.metaText}>{selectedRoute.height} m</Text>
+                        </View>
+                    )}
+                    
+                    {selectedRoute.quickdraws && (
+                        <View style={[styles.metaBadge, {marginLeft: 10}]}>
+                            <Ionicons name="link" size={14} color="#666" style={{marginRight:4}} />
+                            <Text style={styles.metaText}>{selectedRoute.quickdraws} dégaines</Text>
+                        </View>
+                    )}
+
+                    {/* Fallback si pas d'info */}
+                    {!selectedRoute.height && !selectedRoute.quickdraws && (
+                        <Text style={{color:'#999', fontSize:12, fontStyle:'italic'}}>Infos manquantes</Text>
+                    )}
+                </View>
              </View>
         ) : (
              <TouchableOpacity style={styles.addRouteBtn} onPress={handleProposeRoute}>
@@ -335,5 +358,18 @@ const styles = StyleSheet.create({
   routeTitle: { fontWeight: 'bold', fontSize: 18, color: '#333', marginRight: 10, flex: 1 },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
   badgeText: { color: '#fff', fontWeight: 'bold' },
-  detailsBtn: { backgroundColor: '#333', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 8 }
+  detailsBtn: { backgroundColor: '#333', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 8 },
+  metaBadge: {
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#f0f0f0', 
+    paddingHorizontal: 8, 
+    paddingVertical: 4, 
+    borderRadius: 6 
+  },
+  metaText: {
+    color: '#444', 
+    fontSize: 12, 
+    fontWeight: '600'
+  },
 });

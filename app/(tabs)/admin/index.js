@@ -1,253 +1,242 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { arrayUnion, collection, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    FlatList,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { useFocusEffect } from 'expo-router';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '../../../firebaseConfig';
-import { getGradeColor } from '../../../utils/gradeColors';
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
 
 export default function AdminDashboard() {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState('routes'); // 'routes', 'secteurs', 'sites'
-  const [pendingItems, setPendingItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // 3 Onglets : 'routes' | 'sites' | 'sectors'
+  const [activeTab, setActiveTab] = useState('routes');
   
-  // Pour la prévisualisation
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [previewImage, setPreviewImage] = useState(null);
+  const [pendingRoutes, setPendingRoutes] = useState([]);
+  const [pendingSites, setPendingSites] = useState([]);
+  const [pendingSectors, setPendingSectors] = useState([]);
+  const [pendingTopos, setPendingTopos] = useState([]); 
+  const [loading, setLoading] = useState(true);
 
-  // Charger les données selon l'onglet
-  const fetchPending = async () => {
+  // Chargement des données à chaque fois qu'on vient sur l'écran
+  useFocusEffect(
+    useCallback(() => {
+      fetchAllPending();
+    }, [])
+  );
+
+  const fetchAllPending = async () => {
     setLoading(true);
     try {
-        let colName = "pending_routes";
-        if (activeTab === 'secteurs') colName = "pending_sectors";
-        if (activeTab === 'sites') colName = "pending_crags";
+        // 1. Voies
+        const routesSnap = await getDocs(collection(db, "pending_routes"));
+        setPendingRoutes(routesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-        const q = collection(db, colName);
-        const snapshot = await getDocs(q);
-        const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        setPendingItems(items);
-    } catch (e) {
-        console.error(e);
-        Alert.alert("Erreur", "Impossible de charger les propositions.");
-    } finally {
-        setLoading(false);
-    }
+        // 2. Sites
+        const sitesSnap = await getDocs(collection(db, "pending_sites"));
+        setPendingSites(sitesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+        // 3. Secteurs
+        const sectorsSnap = await getDocs(collection(db, "pending_sectors"));
+        setPendingSectors(sectorsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+        // 4. topos
+        const toposSnap = await getDocs(collection(db, "pending_topos"));
+      setPendingTopos(toposSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    fetchPending();
-  }, [activeTab]);
-
-  // --- ACTIONS DE VALIDATION ---
-
-  const handleApprove = async () => {
-    if (!selectedItem) return;
-
+  // --- LOGIQUE VALIDATION VOIES ---
+  const validateRoute = async (item) => {
     try {
-        if (activeTab === 'routes') {
-            // 1. Référence vers le VRAI topo
-            const topoRef = doc(db, "secteurs", selectedItem.cragId, "topos", selectedItem.topoId);
-            
-            // 2. Ajouter la voie au tableau 'routes' du topo existant
-            const newRoute = {
-                id: Date.now().toString(), // Générer un ID unique
-                nom: selectedItem.nom,
-                cotation: selectedItem.cotation,
-                path: selectedItem.path,
-                addedBy: 'community' // Optionnel : pour savoir d'où ça vient
-            };
+        if (!item.siteId || !item.sectorId) return Alert.alert("Erreur", "Données manquantes (Site/Secteur)");
+        
+        // Chemin : sites > siteId > secteurs > sectorId > topos > topoId
+        const topoRef = doc(db, "sites", item.siteId, "secteurs", item.sectorId, "topos", item.topoId);
+        const topoSnap = await getDoc(topoRef);
 
-            await updateDoc(topoRef, {
-                routes: arrayUnion(newRoute)
-            });
+        if (!topoSnap.exists()) return Alert.alert("Erreur", "Le topo parent n'existe plus");
 
-            // 3. Supprimer de la liste d'attente
-            await deleteDoc(doc(db, "pending_routes", selectedItem.id));
-            
-            Alert.alert("Validé", "La voie a été ajoutée au topo officiel.");
-            setSelectedItem(null);
-            fetchPending(); // Rafraîchir la liste
-        }
-        // Ajouter ici la logique pour 'sites' et 'secteurs' plus tard...
-    } catch (e) {
-        console.error(e);
-        Alert.alert("Erreur", "Échec de la validation : " + e.message);
-    }
+        const currentRoutes = topoSnap.data().routes || [];
+        const newRoute = {
+            id: Date.now().toString(),
+            nom: item.nom,
+            cotation: item.cotation,
+            path: item.path,
+            height: item.height || null,
+            quickdraws: item.quickdraws || null,
+            addedBy: 'user'
+        };
+
+        await updateDoc(topoRef, { routes: [...currentRoutes, newRoute] });
+        await deleteDoc(doc(db, "pending_routes", item.id));
+        fetchAllPending();
+        Alert.alert("Succès", "Voie validée !");
+    } catch (e) { Alert.alert("Erreur", e.message); }
   };
 
-  const handleReject = async () => {
-      if (!selectedItem) return;
-      Alert.alert(
-          "Refuser", 
-          "Supprimer définitivement cette proposition ?",
-          [
-              { text: "Annuler", style: "cancel" },
-              { text: "Supprimer", style: 'destructive', onPress: async () => {
-                  try {
-                    await deleteDoc(doc(db, `pending_${activeTab}`, selectedItem.id));
-                    setSelectedItem(null);
-                    fetchPending();
-                  } catch(e) { Alert.alert("Erreur", e.message); }
-              }}
-          ]
-      );
-  };
-
-  // Récupérer l'image du topo original pour la preview
-  const openPreview = async (item) => {
-      // Pour afficher le tracé, il nous faut l'image de fond. 
-      // Idéalement, on stocke l'URL de l'image dans la proposition (ce que tu fais déjà via topoId, mais c'est mieux de passer l'URL directement dans propose-route.js ou de la fetcher ici).
-      // Pour simplifier, supposons qu'on doive aller chercher l'image du topo parent :
+  // --- LOGIQUE VALIDATION SITES ---
+  const validateSite = async (item) => {
       try {
-          if (activeTab === 'routes') {
-             // Astuce : Dans propose-route.js, ajoute `imageUrl` dans le addDoc pending_routes pour éviter de refaire un fetch ici !
-             // Si tu ne l'as pas fait, il faudra faire un getDoc(topoRef) ici.
-             // On va supposer que tu vas l'ajouter (voir note plus bas).
-             setSelectedItem(item);
-          }
-      } catch (e) { console.log(e); }
+          // On crée le vrai site dans la collection 'sites'
+          await addDoc(collection(db, "sites"), {
+              nom: item.nom,
+              type: item.type,
+              location: item.location,
+              lat: item.lat,
+              lng: item.lng,
+              createdAt: item.createdAt || serverTimestamp(),
+              status: 'published'
+          });
+          // On supprime la demande
+          await deleteDoc(doc(db, "pending_sites", item.id));
+          fetchAllPending();
+          Alert.alert("Succès", "Site publié !");
+      } catch (e) { Alert.alert("Erreur", e.message); }
   };
 
+  // --- LOGIQUE VALIDATION SECTEURS ---
+  const validateSector = async (item) => {
+      try {
+          // On ajoute le secteur dans la sous-collection du site parent
+          await addDoc(collection(db, "sites", item.siteId, "secteurs"), {
+              nom: item.nom,
+              siteId: item.siteId,
+              createdAt: serverTimestamp()
+          });
+          
+          await deleteDoc(doc(db, "pending_sectors", item.id));
+          fetchAllPending();
+          Alert.alert("Succès", "Secteur validé !");
+      } catch (e) { Alert.alert("Erreur", e.message); }
+  };
+
+  const validateTopo = async (item) => {
+      try {
+          // On ajoute le topo dans : sites/{siteId}/secteurs/{sectorId}/topos
+          await addDoc(collection(db, "sites", item.siteId, "secteurs", item.sectorId, "topos"), {
+              imageUrl: item.imageUrl,
+              imageWidth: item.imageWidth,
+              imageHeight: item.imageHeight,
+              routes: [],
+              nom: "Topo User", // Tu peux demander un nom si tu veux
+              addedBy: 'user',
+              createdAt: serverTimestamp()
+          });
+          
+          await deleteDoc(doc(db, "pending_topos", item.id));
+          fetchAllPending();
+          Alert.alert("Succès", "Topo validé !");
+      } catch (e) { Alert.alert("Erreur", e.message); }
+  };
+
+  // --- LOGIQUE REFUS (Commun) ---
+  const rejectItem = async (collectionName, id) => {
+      try {
+          await deleteDoc(doc(db, collectionName, id));
+          fetchAllPending();
+      } catch (e) { Alert.alert("Erreur", e.message); }
+  };
+
+  // --- RENDER ITEM ---
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.card} onPress={() => openPreview(item)}>
-        <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>{item.nom}</Text>
-            <View style={[styles.badge, { backgroundColor: getGradeColor(item.cotation) }]}>
-                <Text style={styles.badgeText}>{item.cotation}</Text>
-            </View>
+    <View style={styles.card}>
+        <View style={{flex:1}}>
+            <Text style={styles.title}>{item.nom}</Text>
+            
+            {/* Infos spécifiques selon le type */}
+            {activeTab === 'routes' && (
+                <Text style={styles.sub}>Cotation: {item.cotation} • {item.height ? item.height+'m' : ''}</Text>
+            )}
+            {activeTab === 'sites' && (
+                <Text style={styles.sub}>Type: {item.type} • Lat: {item.lat?.toFixed(2)}</Text>
+            )}
+            {activeTab === 'sectors' && (
+                <Text style={styles.sub}>Site parent: {item.siteName}</Text>
+            )}
+            {activeTab === 'topos' && (
+      <View>
+          <Text style={styles.sub}>Secteur: {item.sectorName}</Text>
+          <Image source={{uri: item.imageUrl}} style={{width: 50, height: 50, borderRadius: 5, marginTop: 5}} />
+      </View>
+  )}
         </View>
-        <Text style={styles.subText}>ID Topo: ...{item.topoId.slice(-5)}</Text>
-        <Text style={styles.dateText}>Le {new Date(item.createdAt?.seconds * 1000).toLocaleDateString()}</Text>
-    </TouchableOpacity>
+
+        <View style={{flexDirection:'row', gap: 10}}>
+            <TouchableOpacity onPress={() => {
+                if(activeTab === 'routes') rejectItem('pending_routes', item.id);
+                if(activeTab === 'sites') rejectItem('pending_sites', item.id);
+                if(activeTab === 'sectors') rejectItem('pending_sectors', item.id);
+                if(activeTab === 'topos') rejectItem('pending_topos', item.id);
+            }} style={styles.rejectBtn}>
+                <Ionicons name="trash" size={20} color="#fff" />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => {
+                if(activeTab === 'routes') validateRoute(item);
+                if(activeTab === 'sites') validateSite(item);
+                if(activeTab === 'sectors') validateSector(item);
+                 if(activeTab === 'topos') validateTopo(item);
+            }} style={styles.validateBtn}>
+                <Ionicons name="checkmark" size={20} color="#000" />
+            </TouchableOpacity>
+        </View>
+    </View>
   );
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={router.back}><Ionicons name="arrow-back" size={24} color="#333"/></TouchableOpacity>
-        <Text style={styles.headerTitle}>Administration</Text>
-        <View style={{width:24}}/>
+      <Text style={styles.headerTitle}>Administration</Text>
+      
+      {/* TABS */}
+      <View style={styles.tabsContainer}>
+          <TouchableOpacity onPress={() => setActiveTab('routes')} style={[styles.tab, activeTab === 'routes' && styles.activeTab]}>
+              <Text style={[styles.tabText, activeTab === 'routes' && {color:'#000'}]}>Voies ({pendingRoutes.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('sites')} style={[styles.tab, activeTab === 'sites' && styles.activeTab]}>
+              <Text style={[styles.tabText, activeTab === 'sites' && {color:'#000'}]}>Sites ({pendingSites.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('sectors')} style={[styles.tab, activeTab === 'sectors' && styles.activeTab]}>
+              <Text style={[styles.tabText, activeTab === 'sectors' && {color:'#000'}]}>Secteurs ({pendingSectors.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('topos')} style={[styles.tab, activeTab === 'topos' && styles.activeTab]}>
+      <Text style={[styles.tabText, activeTab === 'topos' && {color:'#000'}]}>Topos ({pendingTopos.length})</Text>
+  </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-          {['routes', 'secteurs', 'sites'].map(tab => (
-              <TouchableOpacity 
-                key={tab} 
-                onPress={() => setActiveTab(tab)}
-                style={[styles.tabItem, activeTab === tab && styles.tabActive]}
-              >
-                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </Text>
-              </TouchableOpacity>
-          ))}
-      </View>
-
-      {/* Liste */}
-      {loading ? <ActivityIndicator size="large" style={{marginTop:20}}/> : (
+      {/* LISTE */}
+      {loading ? <ActivityIndicator color="#FFD700" style={{marginTop:20}}/> : (
           <FlatList 
-            data={pendingItems}
-            keyExtractor={item => item.id}
+            data={
+                activeTab === 'routes' ? pendingRoutes : 
+                activeTab === 'sites' ? pendingSites : 
+                activeTab === 'sectors' ? pendingSectors : pendingTopos // <---
+            }
+            keyExtractor={i => i.id}
             renderItem={renderItem}
-            ListEmptyComponent={<Text style={styles.emptyText}>Aucune validation en attente.</Text>}
-            contentContainerStyle={{ padding: 20 }}
+            contentContainerStyle={{paddingBottom:50}}
+            ListEmptyComponent={<Text style={{color:'#666', textAlign:'center', marginTop:20}}>Aucune demande en attente.</Text>}
           />
       )}
-
-      {/* MODAL DE VALIDATION (PREVIEW) */}
-      <Modal visible={!!selectedItem} animationType="slide" transparent={true}>
-          <View style={styles.modalContainer}>
-              <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>Valider : {selectedItem?.nom}</Text>
-                  
-                  {/* Prévisualisation Visuelle */}
-                  <View style={styles.previewContainer}>
-                      {/* Note : Pour que ça marche parfaitement, assure-toi d'enregistrer l'URL de l'image dans pending_routes */}
-                      {/* Si l'image n'est pas dispo, affiche un placeholder */}
-                      <View style={{width: '100%', height: 300, backgroundColor: '#333', justifyContent:'center', alignItems:'center'}}>
-                          {/* Calque SVG du tracé proposé */}
-                          <Svg height="100%" width="100%" viewBox={`0 0 ${selectedItem?.imageDimensions?.width || SCREEN_WIDTH} ${selectedItem?.imageDimensions?.height || 300}`}>
-                             <Path 
-                                d={selectedItem?.path} 
-                                stroke={getGradeColor(selectedItem?.cotation)} 
-                                strokeWidth="5" 
-                                fill="none" 
-                             />
-                          </Svg>
-                          <Text style={{position:'absolute', bottom: 10, color:'white', opacity:0.5}}>
-                              (Image de fond non chargée pour rapidité)
-                          </Text>
-                      </View>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                      <Text>Cotation proposée : </Text>
-                      <Text style={{fontWeight:'bold', fontSize:18}}>{selectedItem?.cotation}</Text>
-                  </View>
-
-                  <View style={styles.actionRow}>
-                      <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#ff4444'}]} onPress={handleReject}>
-                          <Ionicons name="trash" size={20} color="#fff"/>
-                          <Text style={styles.btnText}>Rejeter</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#00C851'}]} onPress={handleApprove}>
-                          <Ionicons name="checkmark" size={20} color="#fff"/>
-                          <Text style={styles.btnText}>Valider</Text>
-                      </TouchableOpacity>
-                  </View>
-                  
-                  <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedItem(null)}>
-                      <Text style={{color:'#666'}}>Fermer</Text>
-                  </TouchableOpacity>
-              </View>
-          </View>
-      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    header: { flexDirection: 'row', justifyContent:'space-between', padding: 20, paddingTop: 50, backgroundColor: '#fff', elevation: 2 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
-    tabs: { flexDirection: 'row', backgroundColor: '#fff', padding: 10 },
-    tabItem: { flex: 1, padding: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-    tabActive: { borderBottomColor: '#007AFF' },
-    tabText: { color: '#999' },
-    tabTextActive: { color: '#007AFF', fontWeight: 'bold' },
-    card: { backgroundColor: '#fff', padding: 15, borderRadius: 10, marginBottom: 10, elevation: 1 },
-    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    cardTitle: { fontSize: 16, fontWeight: 'bold' },
-    badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-    badgeText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-    subText: { color: '#666', fontSize: 12, marginTop: 5 },
-    dateText: { color: '#999', fontSize: 10, marginTop: 2 },
-    emptyText: { textAlign: 'center', marginTop: 50, color: '#999' },
-    
-    // Modal
-    modalContainer: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.8)', padding: 20 },
-    modalContent: { backgroundColor: '#fff', borderRadius: 10, padding: 20, alignItems: 'center' },
-    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
-    previewContainer: { width: '100%', borderRadius: 8, overflow: 'hidden', marginBottom: 20, backgroundColor: '#000' },
-    infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-    actionRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-    actionBtn: { flex: 0.48, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 15, borderRadius: 8 },
-    btnText: { color: '#fff', fontWeight: 'bold', marginLeft: 10 },
-    closeBtn: { marginTop: 20, padding: 10 }
+  container: { flex: 1, backgroundColor: '#000', padding: 20, paddingTop: 50 },
+  headerTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
+  
+  tabsContainer: { flexDirection: 'row', marginBottom: 20, backgroundColor: '#222', borderRadius: 10, padding: 5 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  activeTab: { backgroundColor: '#FFD700' },
+  tabText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+
+  card: { 
+      backgroundColor: '#1a1a1a', padding: 15, borderRadius: 10, marginBottom: 10, 
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      borderWidth: 1, borderColor: '#333'
+  },
+  title: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  sub: { color: '#aaa', fontSize: 12, marginTop: 4 },
+
+  validateBtn: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8 },
+  rejectBtn: { backgroundColor: '#FF3B30', padding: 10, borderRadius: 8 }
 });
