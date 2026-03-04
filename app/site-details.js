@@ -100,18 +100,36 @@ export default function SiteDetailsScreen() {
     </TouchableOpacity>
   );
 
-  // --- HEADER DYNAMIQUE ---
+// --- HEADER DYNAMIQUE ---
   const renderHeader = () => {
-      // Si on a une image, on affiche la bannière
+      // CAS 1 : Si on a une image (Bannière)
       if (siteData?.imageUrl) {
           return (
               <ImageBackground source={{ uri: siteData.imageUrl }} style={styles.headerImage}>
-                  {/* Voile noir pour lire le texte */}
                   <View style={styles.headerOverlay}>
-                      <TouchableOpacity onPress={() => router.back()} style={styles.backBtnCircle}>
-                          <Ionicons name="arrow-back" size={24} color="#000" />
-                      </TouchableOpacity>
+                      {/* Ligne du haut : Retour + Edit */}
+                      <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start'}}>
+                          <TouchableOpacity onPress={() => router.back()} style={styles.backBtnCircle}>
+                              <Ionicons name="arrow-back" size={24} color="#000" />
+                          </TouchableOpacity>
+
+                          {/* BOUTON CRAYON (Pour modifier l'image) */}
+                          <TouchableOpacity 
+                            style={styles.editPhotoBtn}
+                            onPress={() => router.push({
+                                pathname: '/propose-edit',
+                                params: { 
+                                    collectionName: 'sites', 
+                                    docId: siteId, 
+                                    currentName: siteData.nom 
+                                }
+                            })}
+                          >
+                              <Ionicons name="pencil" size={20} color="#000" />
+                          </TouchableOpacity>
+                      </View>
                       
+                      {/* Titre et Badge en bas */}
                       <View style={styles.headerTextContainer}>
                           <Text style={styles.bigTitle}>{siteData.nom}</Text>
                           <View style={[styles.badge, {backgroundColor: siteData.type === 'bloc' ? '#FFD700' : '#FF3B30'}]}>
@@ -123,13 +141,25 @@ export default function SiteDetailsScreen() {
           );
       }
 
-      // Fallback classique si pas d'image
+      // CAS 2 : Pas d'image (Simple Header)
       return (
         <View style={styles.simpleHeader}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                <Ionicons name="arrow-back" size={24} color="#fff" />
+            <View style={{flexDirection:'row', alignItems:'center'}}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                    <Ionicons name="arrow-back" size={24} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>{siteName}</Text>
+            </View>
+
+            {/* Bouton pour AJOUTER une photo si y'en a pas */}
+            <TouchableOpacity 
+                onPress={() => router.push({
+                    pathname: '/propose-edit',
+                    params: { collectionName: 'sites', docId: siteId, currentName: siteName }
+                })}
+            >
+                <Ionicons name="camera-outline" size={24} color="#FFD700" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>{siteName}</Text>
         </View>
       );
   };
